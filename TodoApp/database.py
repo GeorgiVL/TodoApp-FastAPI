@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
 # Telling which database to use
-SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Acronis_12345@localhost/TodoApplicationDatabase'
+SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:password@localhost/TodoApplicationDatabase'
 
 # Telling SQLAlchemy how to connect to the database, where check_same_thread means that the database is only used by one thread
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
