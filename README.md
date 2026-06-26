@@ -12,7 +12,7 @@ end to end.
 |-------|--------------|
 | Backend | FastAPI, SQLAlchemy 2, PostgreSQL (psycopg2), Alembic, python-jose (JWT), passlib/bcrypt, Uvicorn |
 | Frontend | React 19, TypeScript, Vite, React Router |
-| Tests | pytest, Starlette `TestClient` (SQLite) |
+| Tests | pytest, Starlette `TestClient` (SQLite), Playwright E2E (Chromium) |
 | Docker | Docker, Docker Compose (Postgres + FastAPI + Nginx) |
 
 ---
@@ -31,13 +31,15 @@ fastapi/
 ├── frontend/                # React + TypeScript (Vite)
 │   ├── Dockerfile           # Multi-stage: Node build → Nginx serve
 │   ├── nginx.conf           # SPA + API reverse proxy
+│   ├── playwright.config.ts # E2E test configuration
+│   ├── e2e/                 # Playwright E2E tests + Dockerfile
 │   └── src/
 │       ├── api/             # fetch client, auth + todos + users + admin calls
 │       ├── auth/            # AuthContext, ProtectedRoute, AdminRoute
 │       ├── components/      # Navbar, TodoForm, TodoItem, HealthBadge
 │       └── pages/           # LoginPage, RegisterPage, TodosPage, ProfilePage, AdminPage
 ├── Dockerfile              # Backend image
-├── docker-compose.yml      # db + backend + frontend
+├── docker-compose.yml      # db + backend + frontend + e2e (optional profile)
 ├── .env.example            # Backend environment template
 ├── requirements.txt        # Python dependencies
 └── README.md
@@ -84,6 +86,12 @@ To stop: `docker compose down` (add `-v` to also delete the database volume).
 │  (Nginx)    │     │  (FastAPI)   │     │ (PostgreSQL) │
 │  :3000      │     │  :8000       │     │  :5432       │
 └─────────────┘     └──────────────┘     └──────────────┘
+       ▲
+       │ (optional: --profile test)
+┌──────┴──────┐
+│    e2e      │
+│ (Playwright)│
+└─────────────┘
 ```
 
 - **frontend**: Multi-stage Dockerfile — Node builds the Vite app, Nginx serves the
@@ -91,6 +99,7 @@ To stop: `docker compose down` (add `-v` to also delete the database volume).
   and `/healthy` to the backend container.
 - **backend**: Python 3.12-slim image running uvicorn on port 8000.
 - **db**: PostgreSQL 16 Alpine with a health check.
+- **e2e** *(optional, `--profile test`)*: Node 22 Alpine with Playwright + Chromium. Runs all 50 E2E tests against the live Docker stack and exits.
 
 ### Overriding Docker settings
 
@@ -232,6 +241,8 @@ All `/todos`, `/users`, and `/admin` routes require an `Authorization: Bearer <t
 
 ## Running tests
 
+### Backend unit tests (pytest)
+
 The backend test suite uses a SQLite test database:
 
 ```bash
@@ -244,6 +255,49 @@ $env:DATABASE_URL = "sqlite:///./test_smoke.db"; pytest TodoApp/test -q
 #   macOS / Linux:
 DATABASE_URL=sqlite:///./test_smoke.db pytest TodoApp/test -q
 ```
+
+### E2E tests (Playwright)
+
+The E2E suite covers authentication, todo management, profile management, admin
+dashboard, and navigation/route protection — 50 tests across 5 spec files.
+
+**Option A — Local (requires backend + frontend running):**
+
+Make sure the FastAPI backend is running on `http://localhost:8000`, then:
+
+```bash
+cd frontend
+npm install        # if not already installed
+npm run e2e        # headless (default)
+npm run e2e:headed # visible browser
+npm run e2e:ui     # interactive Playwright UI mode
+```
+
+Run a specific test file:
+```bash
+npx playwright test e2e/todos.spec.ts --headed
+```
+
+Run a specific test by name (partial match):
+```bash
+npx playwright test -g "Verify that a user can toggle" --headed
+```
+
+Run a specific test by file and line number:
+```bash
+npx playwright test e2e/todos.spec.ts:104 --headed
+```
+
+**Option B — Docker (runs the entire stack + tests in containers):**
+
+```bash
+docker compose --profile test up --build --abort-on-container-exit --exit-code-from e2e
+```
+
+This starts PostgreSQL, the FastAPI backend, the Nginx-served frontend, and a
+Playwright container that runs all 50 tests against the live Docker stack.
+The `--profile test` flag ensures the `e2e` service only runs when explicitly
+requested (it won't start with a plain `docker compose up`).
 
 ---
 
