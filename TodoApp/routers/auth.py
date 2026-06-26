@@ -125,3 +125,13 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+
+@router.post("/refresh", response_model=Token, status_code=status.HTTP_200_OK)
+async def refresh_access_token(user: Annotated[dict, Depends(get_current_user)]):
+    """Issue a new JWT for an authenticated user before the current one expires."""
+    access_token = create_access_token(
+        user["username"], user["id"], user["user_role"],
+        timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"access_token": access_token, "token_type": "bearer"}

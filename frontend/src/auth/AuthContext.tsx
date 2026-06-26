@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { registerUser, login as apiLogin } from '../api/auth'
+import { registerUser, login as apiLogin, refreshToken as apiRefresh } from '../api/auth'
 import { clearToken, getToken, setUnauthorizedHandler } from '../api/client'
 import type { JwtPayload, RegisterInput } from '../types'
 
@@ -15,6 +15,7 @@ interface AuthContextValue {
   isAuthenticated: boolean
   login: (username: string, password: string) => Promise<void>
   register: (input: RegisterInput) => Promise<void>
+  refreshSession: () => Promise<void>
   logout: () => void
 }
 
@@ -65,9 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(input.username, input.password)
   }, [login])
 
+  const refreshSession = useCallback(async () => {
+    const token = await apiRefresh()
+    setUser(userFromToken(token))
+  }, [])
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, login, register, logout }),
-    [user, login, register, logout],
+    () => ({ user, isAuthenticated: user !== null, login, register, refreshSession, logout }),
+    [user, login, register, refreshSession, logout],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

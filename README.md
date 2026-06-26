@@ -13,6 +13,7 @@ end to end.
 | Backend | FastAPI, SQLAlchemy 2, PostgreSQL (psycopg2), Alembic, python-jose (JWT), passlib/bcrypt, Uvicorn |
 | Frontend | React 19, TypeScript, Vite, React Router |
 | Tests | pytest, Starlette `TestClient` (SQLite) |
+| Docker | Docker, Docker Compose (Postgres + FastAPI + Nginx) |
 
 ---
 
@@ -28,11 +29,15 @@ fastapi/
 │   ├── alembic/             # DB migrations
 │   └── test/                # pytest suite
 ├── frontend/                # React + TypeScript (Vite)
+│   ├── Dockerfile           # Multi-stage: Node build → Nginx serve
+│   ├── nginx.conf           # SPA + API reverse proxy
 │   └── src/
-│       ├── api/             # fetch client, auth + todos calls
-│       ├── auth/            # AuthContext, ProtectedRoute
-│       ├── components/      # Navbar, TodoForm, TodoItem
-│       └── pages/           # LoginPage, RegisterPage, TodosPage
+│       ├── api/             # fetch client, auth + todos + users + admin calls
+│       ├── auth/            # AuthContext, ProtectedRoute, AdminRoute
+│       ├── components/      # Navbar, TodoForm, TodoItem, HealthBadge
+│       └── pages/           # LoginPage, RegisterPage, TodosPage, ProfilePage, AdminPage
+├── Dockerfile              # Backend image
+├── docker-compose.yml      # db + backend + frontend
 ├── .env.example            # Backend environment template
 ├── requirements.txt        # Python dependencies
 └── README.md
@@ -42,13 +47,65 @@ fastapi/
 
 ## Prerequisites
 
+**Option A — Docker (recommended for quick start):**
+- **Docker** and **Docker Compose** installed
+
+**Option B — Local development:**
 - **Python** 3.11+
 - **Node.js** 18+ and npm
 - **PostgreSQL** 13+ running locally *(or use the SQLite fallback — see below)*
 
 ---
 
-## 1. Backend setup
+## Quick start with Docker
+
+The entire stack (PostgreSQL + FastAPI + Nginx-served React) runs with a single command:
+
+```bash
+docker compose up --build
+```
+
+That's it. The app is available at:
+
+| Service | URL |
+|---------|-----|
+| Frontend (React) | **http://localhost:3000** |
+| Backend API | **http://localhost:8000** |
+| Swagger docs | **http://localhost:8000/docs** |
+| PostgreSQL | `localhost:5432` |
+
+To stop: `docker compose down` (add `-v` to also delete the database volume).
+
+### Docker architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│  frontend   │────▶│   backend    │────▶│      db      │
+│  (Nginx)    │     │  (FastAPI)   │     │ (PostgreSQL) │
+│  :3000      │     │  :8000       │     │  :5432       │
+└─────────────┘     └──────────────┘     └──────────────┘
+```
+
+- **frontend**: Multi-stage Dockerfile — Node builds the Vite app, Nginx serves the
+  static files on port 3000 and reverse-proxies `/auth/`, `/todos/`, `/users/`, `/admin/`,
+  and `/healthy` to the backend container.
+- **backend**: Python 3.12-slim image running uvicorn on port 8000.
+- **db**: PostgreSQL 16 Alpine with a health check.
+
+### Overriding Docker settings
+
+Create a `.env` file in the repo root to override any backend variable:
+```dotenv
+SECRET_KEY=<your-strong-secret>
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+CORS_ORIGINS=http://localhost:3000,https://myapp.example.com
+```
+
+---
+
+## Local development setup
+
+### 1. Backend setup
 
 All commands run from the **repository root**.
 
@@ -140,9 +197,11 @@ VITE_API_URL=http://localhost:8000
 
 ## 3. Using the app
 
-1. Open **http://localhost:5173**.
+1. Open **http://localhost:5173** (local dev) or **http://localhost:3000** (Docker).
 2. Click **Create one** to register an account (you'll be logged in automatically).
 3. Add, edit, complete, and delete todos — each list is scoped to the logged-in user.
+4. Visit **Profile** to view your account info, change your password, or update your phone number.
+5. If your role is **admin**, an **Admin** link appears in the navbar — use it to view and delete todos across all users.
 
 ---
 
@@ -154,6 +213,7 @@ All `/todos`, `/users`, and `/admin` routes require an `Authorization: Bearer <t
 |--------|----------|-------------|
 | `POST` | `/auth/` | Register a new user |
 | `POST` | `/auth/token` | Log in (OAuth2 password form) → JWT |
+| `POST` | `/auth/refresh` | Exchange a valid JWT for a fresh one *(authenticated)* |
 | `GET`  | `/todos/` | List the current user's todos |
 | `POST` | `/todos/todo` | Create a todo |
 | `GET`  | `/todos/todo/{id}` | Get one todo |
@@ -165,8 +225,8 @@ All `/todos`, `/users`, and `/admin` routes require an `Authorization: Bearer <t
 | `GET`  | `/admin/todo` | List all todos *(admin role)* |
 | `DELETE` | `/admin/todo/{id}` | Delete any todo *(admin role)* |
 
-> The current React frontend covers **auth + todos**. The users/admin endpoints are
-> available on the API and documented in Swagger.
+> The React frontend covers **all backend endpoints**: auth, todos, user profile
+> management, and the admin dashboard.
 
 ---
 
@@ -191,4 +251,7 @@ DATABASE_URL=sqlite:///./test_smoke.db pytest TodoApp/test -q
 
 - **CORS** is configured in `TodoApp/main.py` via `CORS_ORIGINS`; add your frontend origin there for non-default ports or deployments.
 - **Secrets** (`DATABASE_URL`, `SECRET_KEY`) load from `.env` through `python-dotenv`. Keep them out of source control.
-- **Ports:** backend `8000`, frontend `5173` — change via `--port` (uvicorn) and `frontend/vite.config.ts`.
+- **Ports:**
+  - Local dev: backend `8000`, frontend `5173`
+  - Docker: backend `8000`, frontend `3000` (Nginx), PostgreSQL `5432`
+- **Docker** is the easiest way to run the full stack — just `docker compose up --build`.

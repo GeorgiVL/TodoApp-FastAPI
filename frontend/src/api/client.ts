@@ -1,7 +1,10 @@
 // Thin fetch wrapper: prepends the API base URL, injects the bearer token,
 // normalizes errors into ApiError, and notifies AuthContext on 401s.
 
-const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '')
+// When VITE_API_URL is unset (dev), default to localhost:8000.
+// When set to "" (Docker), use same-origin so Nginx proxies /api to the backend.
+const _raw = import.meta.env.VITE_API_URL
+const API_URL = (_raw && _raw.trim()) ? _raw.replace(/\/$/, '') : 'http://localhost:8000'
 
 const TOKEN_KEY = 'todoapp_token'
 

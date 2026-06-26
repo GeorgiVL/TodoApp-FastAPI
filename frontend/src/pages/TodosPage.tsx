@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Navbar from '../components/Navbar'
 import TodoForm from '../components/TodoForm'
 import TodoItem from '../components/TodoItem'
 import { createTodo, deleteTodo, listTodos, updateTodo } from '../api/todos'
 import { ApiError } from '../api/client'
 import type { Todo, TodoInput } from '../types'
+
+type SortKey = 'default' | 'priority-desc' | 'priority-asc' | 'title'
 
 export default function TodosPage() {
   const [todos, setTodos] = useState<Todo[]>([])
@@ -15,14 +17,14 @@ export default function TodosPage() {
   const [editing, setEditing] = useState<Todo | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('default')
+  const [filterPriority, setFilterPriority] = useState<string>('all')
 
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const data = await listTodos()
-      // Newest first, then incomplete before complete for a tidy list.
-      data.sort((a, b) => Number(a.complete) - Number(b.complete) || b.id - a.id)
       setTodos(data)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load todos.')
@@ -30,6 +32,30 @@ export default function TodosPage() {
       setLoading(false)
     }
   }, [])
+
+  const visibleTodos = useMemo(() => {
+    const filtered = filterPriority === 'all'
+      ? todos
+      : todos.filter((t) => t.priority === Number(filterPriority))
+
+    const sorted = [...filtered]
+    switch (sortKey) {
+      case 'priority-desc':
+        sorted.sort((a, b) => b.priority - a.priority || Number(a.complete) - Number(b.complete) || b.id - a.id)
+        break
+      case 'priority-asc':
+        sorted.sort((a, b) => a.priority - b.priority || Number(a.complete) - Number(b.complete) || b.id - a.id)
+        break
+      case 'title':
+        sorted.sort((a, b) => a.title.localeCompare(b.title))
+        break
+      default:
+        // Default: incomplete first, then newest
+        sorted.sort((a, b) => Number(a.complete) - Number(b.complete) || b.id - a.id)
+        break
+    }
+    return sorted
+  }, [todos, sortKey, filterPriority])
 
   useEffect(() => {
     refresh()
@@ -132,6 +158,31 @@ export default function TodosPage() {
 
         {error && <p className="form-error banner">{error}</p>}
 
+        {!loading && todos.length > 0 && (
+          <div className="todo-controls">
+            <div className="field">
+              <label htmlFor="sort">Sort by</label>
+              <select id="sort" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+                <option value="default">Default (incomplete first)</option>
+                <option value="priority-desc">Priority (high to low)</option>
+                <option value="priority-asc">Priority (low to high)</option>
+                <option value="title">Title (A–Z)</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="filter-priority">Filter by priority</label>
+              <select id="filter-priority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+                <option value="all">All priorities</option>
+                <option value="1">1 — Lowest</option>
+                <option value="2">2 — Low</option>
+                <option value="3">3 — Medium</option>
+                <option value="4">4 — High</option>
+                <option value="5">5 — Highest</option>
+              </select>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <p className="muted">Loading…</p>
         ) : todos.length === 0 ? (
@@ -139,9 +190,13 @@ export default function TodosPage() {
             <p>No todos yet.</p>
             <p className="muted">Create your first one to get started.</p>
           </div>
+        ) : visibleTodos.length === 0 ? (
+          <div className="empty-state">
+            <p>No todos match this filter.</p>
+          </div>
         ) : (
           <ul className="todo-list">
-            {todos.map((todo) => (
+            {visibleTodos.map((todo) => (
               <TodoItem
                 key={todo.id}
                 todo={todo}

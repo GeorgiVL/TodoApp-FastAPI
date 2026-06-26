@@ -41,3 +41,26 @@ export interface JwtPayload {
   role: string
   exp: number
 }
+
+// Response from GET /users/ — full Users model from the backend
+export interface UserProfile {
+  id: number
+  email: string
+  username: string
+  first_name: string
+  last_name: string
+  is_active: boolean
+  role: string
+  phone_number: string
+}
+
+// Body for PUT /users/password
+export interface PasswordChangeInput {
+  password: string
+  new_password: string
+}
+
+// Response from GET /healthy
+export interface HealthStatus {
+  status: string
+}

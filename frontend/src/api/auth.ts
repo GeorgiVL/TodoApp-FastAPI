@@ -16,3 +16,10 @@ export async function login(username: string, password: string): Promise<string>
   setToken(data.access_token)
   return data.access_token
 }
+
+// POST /auth/refresh — exchange a valid JWT for a fresh one with a new expiry.
+export async function refreshToken(): Promise<string> {
+  const data = await request<TokenResponse>('/auth/refresh', { method: 'POST' })
+  setToken(data.access_token)
+  return data.access_token
+}
